@@ -23,6 +23,7 @@ var (
 	keyPath                  = flag.String("key_path", os.Getenv("KEY_PATH"), "Path to Key file (when using SSL for `prometheus_scrape_url`)")
 	skipServerCertCheck      = flag.String("accept_invalid_cert", os.Getenv("ACCEPT_INVALID_CERT"), "Accept any certificate during TLS handshake. Insecure, use only for testing")
 	additionalDimension      = flag.String("additional_dimension", os.Getenv("ADDITIONAL_DIMENSION"), "Additional dimension specified by NAME=VALUE")
+	whitelistRegex           = flag.String("whitelist_regex", os.Getenv("WHITELIST_REGEX"), "If specified, send these whitelisted metrics to send to AWS CloudWatch instead of everything")
 )
 
 func main() {
@@ -73,6 +74,7 @@ func main() {
 		AwsAccessKeyId:                *awsAccessKeyId,
 		AwsSecretAccessKey:            *awsSecretAccessKey,
 		AdditionalDimensions:          additionalDimensions,
+		WhitelistRegex:                *whitelistRegex,
 	}
 
 	if *prometheusScrapeInterval != "" {
@@ -98,5 +100,8 @@ func main() {
 	}
 
 	fmt.Println("prometheus-to-cloudwatch: Starting prometheus-to-cloudwatch bridge")
+	if len(*whitelistRegex) > 0 {
+		fmt.Printf("prometheus-to-cloudwatch: Only metric names matching this regex will be processed: '%v'\n", *whitelistRegex)
+	}
 	bridge.Run(context.Background())
 }

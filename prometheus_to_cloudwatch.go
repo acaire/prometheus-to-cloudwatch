@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"sort"
 	"time"
+	"regexp"
 )
 
 const (
@@ -62,6 +63,10 @@ type Config struct {
 
 	// Additional dimensions to send to CloudWatch
 	AdditionalDimensions map[string]string
+
+	// Regex expression of whitelisted metrics to send to CloudWatch
+	WhitelistRegex string
+
 }
 
 // Bridge pushes metrics to AWS CloudWatch
@@ -74,6 +79,7 @@ type Bridge struct {
 	prometheusKeyPath             string
 	prometheusSkipServerCertCheck bool
 	additionalDimensions          map[string]string
+	whitelistRegex                string
 }
 
 // NewBridge initializes and returns a pointer to a Bridge using the
@@ -95,6 +101,7 @@ func NewBridge(c *Config) (*Bridge, error) {
 	b.prometheusKeyPath = c.PrometheusKeyPath
 	b.prometheusSkipServerCertCheck = c.PrometheusSkipServerCertCheck
 	b.additionalDimensions = c.AdditionalDimensions
+	b.whitelistRegex = c.WhitelistRegex
 
 	if c.CloudWatchPublishInterval > 0 {
 		b.cloudWatchPublishInterval = c.CloudWatchPublishInterval
@@ -146,8 +153,19 @@ func (b *Bridge) Run(ctx context.Context) {
 			go fetchMetricFamilies(b.prometheusScrapeUrl, mfChan, b.prometheusCertPath, b.prometheusKeyPath, b.prometheusSkipServerCertCheck)
 
 			var metricFamilies []*dto.MetricFamily
-			for mf := range mfChan {
-				metricFamilies = append(metricFamilies, mf)
+
+			if len(b.whitelistRegex) > 0 {
+				r := regexp.MustCompile(b.whitelistRegex)
+				for mf := range mfChan {
+					matched := r.MatchString(mf.GetName())
+					if matched {
+						metricFamilies = append(metricFamilies, mf)
+					}
+				}
+			} else {
+				for mf := range mfChan {
+					metricFamilies = append(metricFamilies, mf)
+				}
 			}
 
 			err := b.publishMetricsToCloudWatch(metricFamilies)
